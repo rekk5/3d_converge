@@ -1,0 +1,131 @@
+tsdf_fusion.py → segmentation.py → diffraction.py
+
+This is te basic pipeline for the code to get the diffraction edges currently there are some porblems with saving the lines in the diffraction edges, but this likely is a minor fix in the code and im working on it.
+
+
+--------------------------------------------------------------------------------------------TSDF Fusion Pipeline Documentation--------------------------------------------------------------------------------------------
+
+1. INPUT REQUIREMENTS
+
+Required Files:
+- N RGB images (.jpg)
+- N Depth images (.png)
+- 1 Camera poses file (.txt)
+- 1 Camera calibration file (.yaml)
+
+Where N = number of frames to process (RGB and Depth images must match in count)
+
+File Structure:
+/your_data_folder/
+    ├── color/              # N RGB images (1.jpg, 2.jpg, ..., N.jpg)
+    ├── depth_render/       # N Depth images (1.png, 2.png, ..., N.png)
+    ├── poses/
+    │   └── poses_color.txt # Single file with N poses
+    └── calibration/
+        └── calib_color.yaml
+
+File Formats:
+1. RGB Images: Standard JPG files
+2. Depth Images: Single-channel PNG files
+3. Poses File: Text file with each line containing:
+   timestamp x y z qx qy qz qw
+4. Calibration File: YAML file containing:
+   - image_width
+   - image_height
+   - projection_matrix
+
+2. OUTPUT
+
+Generated Files:
+1. point_cloud.ply - 3D point cloud with colors
+2. mesh.ply - 3D triangulated mesh
+
+Output Location:
+/your_data_folder/recon/
+
+3. COMMAND LINE USAGE
+
+Basic usage:
+python tsdf_fusion.py --save_pcd --save_mesh
+
+Optional parameters:
+--voxel_length: Size of voxels (default: 0.01)
+--sdf_trunc: Truncation distance (default: 0.04)
+
+
+--------------------------------------------------------------------------------------------Plane Segmentation Pipeline Documentation--------------------------------------------------------------------------------------------
+
+1. INPUT REQUIREMENTS
+
+Required Files:
+- 1 Point Cloud file (.ply)
+  * Should contain 3D points
+  * Can include colors (optional)
+
+File Structure:
+/your_folder/
+    └── input.ply    # Your input point cloud file
+
+2. OUTPUT
+
+Generated File:
+- 1 Segmented point cloud (.ply)
+  * Contains original points divided into planes
+  * Each plane is colored differently
+  * Non-plane points are colored gray
+  * If densification is enabled, planes will have additional points
+
+Output Location:
+- Default: Same directory as input with '_segmented.ply' suffix
+- Example: input.ply → input_segmented.ply
+
+3. COMMAND LINE USAGE
+
+Basic usage:
+python segmentation.py input.ply
+
+Optional parameters:
+--output_path: Custom output path
+--max_planes: Maximum number of planes to detect (default: 12)
+--voxel_size: Size for downsampling (default: 0.05)
+--densify: Add this flag to create denser plane segments
+
+Example:
+python segmentation.py input.ply --max_planes 15 --densify
+
+4. PROCESSING STEPS
+
+The pipeline will:
+1. Load the point cloud
+2. Estimate surface normals
+3. Iteratively find and segment planes
+4. Optionally densify each plane
+5. Save the colored and segmented result
+
+--------------------------------------------------------------------------------------------Diffraction Edge Detection Pipeline Documentation--------------------------------------------------------------------------------------------
+
+
+1. INPUT REQUIREMENTS
+
+Required Files:
+- 1 Segmented Point Cloud file (.ply)
+  * Must contain colored points
+  * Each plane should be a different color
+  * Format: PLY with RGB colors
+
+2. OUTPUT
+
+Generated Files:
+1. Edge-enhanced point cloud (.ply)
+   * Contains original points with colors
+   * Diffraction edges marked in red
+   * 100 points per edge line
+
+	
+3. COMMAND LINE USAGE
+
+Basic usage:
+python diffraction.py input.ply output.ply
+
+Example:
+python diffraction.py segmented.ply edges.ply
