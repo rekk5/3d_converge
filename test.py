@@ -10,11 +10,39 @@ def check_ply_contents(ply_file):
         # Load PLY file
         ply_data = PlyData.read(ply_file)
         
+        # Define required properties
+        required_vertex_properties = {
+            'x': 'f4', 'y': 'f4', 'z': 'f4',           # position
+            'red': 'u1', 'green': 'u1', 'blue': 'u1',   # color
+            'nx': 'f4', 'ny': 'f4', 'nz': 'f4',         # normal
+            'label': 'u4', 'material': 'u4'             # metadata
+        }
+        
+        required_edge_properties = {
+            'start_x': 'f4', 'start_y': 'f4', 'start_z': 'f4',  # start point
+            'end_x': 'f4', 'end_y': 'f4', 'end_z': 'f4',       # end point
+            'normal1_x': 'f4', 'normal1_y': 'f4', 'normal1_z': 'f4',  # normal1
+            'normal2_x': 'f4', 'normal2_y': 'f4', 'normal2_z': 'f4',  # normal2
+            'plane1': 'u4', 'plane2': 'u4',                      # plane indices
+            'material1': 'u4', 'material2': 'u4'                 # material indices
+        }
+        
         # Check vertex data
         if 'vertex' in ply_data:
             vertex = ply_data['vertex']
             print("\nVertex Data:")
             print(f"Number of vertices: {len(vertex)}")
+            
+            # Check for required vertex properties
+            print("\nChecking required vertex properties:")
+            vertex_properties = {prop.name: prop.val_dtype for prop in vertex.properties}
+            for prop_name, prop_type in required_vertex_properties.items():
+                if prop_name in vertex_properties:
+                    status = "✓" if vertex_properties[prop_name] == prop_type else "⚠ (wrong type)"
+                else:
+                    status = "✗"
+                print(f"- {prop_name}: {status}")
+            
             print("\nAvailable properties:")
             for prop in vertex.properties:
                 print(f"- {prop.name}: {prop.val_dtype}")
@@ -34,6 +62,17 @@ def check_ply_contents(ply_file):
             edge = ply_data['edge']
             print("\nEdge Data:")
             print(f"Number of edges: {len(edge)}")
+            
+            # Check for required edge properties
+            print("\nChecking required edge properties:")
+            edge_properties = {prop.name: prop.val_dtype for prop in edge.properties}
+            for prop_name, prop_type in required_edge_properties.items():
+                if prop_name in edge_properties:
+                    status = "✓" if edge_properties[prop_name] == prop_type else "⚠ (wrong type)"
+                else:
+                    status = "✗"
+                print(f"- {prop_name}: {status}")
+            
             print("\nAvailable properties:")
             for prop in edge.properties:
                 print(f"- {prop.name}: {prop.val_dtype}")
@@ -68,9 +107,14 @@ def check_ply_contents(ply_file):
                 for e in edge:
                     unique_plane_pairs.add((e['plane1'], e['plane2']))
                 print(f"Number of unique plane pairs forming edges: {len(unique_plane_pairs)}")
-                print("Plane pairs:")
-                for pair in unique_plane_pairs:
-                    print(f"Planes {pair[0]} and {pair[1]}")
+                print("\nPlane pairs and their properties:")
+                for e in edge[:3]:  # Show first 3 edges as examples
+                    print(f"\nEdge between planes {e['plane1']} and {e['plane2']}:")
+                    print(f"  Start point: ({e['start_x']:.3f}, {e['start_y']:.3f}, {e['start_z']:.3f})")
+                    print(f"  End point: ({e['end_x']:.3f}, {e['end_y']:.3f}, {e['end_z']:.3f})")
+                    print(f"  Normal 1: ({e['normal1_x']:.3f}, {e['normal1_y']:.3f}, {e['normal1_z']:.3f})")
+                    print(f"  Normal 2: ({e['normal2_x']:.3f}, {e['normal2_y']:.3f}, {e['normal2_z']:.3f})")
+                    print(f"  Materials: {e['material1']} and {e['material2']}")
         
     except Exception as e:
         print(f"\nError reading PLY file: {e}")

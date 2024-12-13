@@ -209,39 +209,50 @@ def save_comprehensive_ply(points, colors, normals, labels, diffraction_edges, o
     vertex_data = []
     for p, c, n, l in zip(points, colors, normals, labels):
         vertex_data.append((
-            float(p[0]), float(p[1]), float(p[2]),    # x, y, z (as float64)
+            float(p[0]), float(p[1]), float(p[2]),    # x, y, z (as float32)
             int(c[0]), int(c[1]), int(c[2]),          # red, green, blue (as uint8)
             float(n[0]), float(n[1]), float(n[2]),    # nx, ny, nz (as float32)
             int(l),                                    # label (as uint32)
-            0                                          # material (as uint32)
+            int(l)                                     # material (as uint32) = label
         ))
     
-    # Define vertex element with correct data types
+    # Define vertex element with updated data types
     vertex = np.array(vertex_data,
         dtype=[
-            ('x', 'f8'), ('y', 'f8'), ('z', 'f8'),           # positions as float64
+            ('x', 'f4'), ('y', 'f4'), ('z', 'f4'),           # positions as float32
             ('red', 'u1'), ('green', 'u1'), ('blue', 'u1'),  # colors as uint8
             ('nx', 'f4'), ('ny', 'f4'), ('nz', 'f4'),        # normals as float32
             ('label', 'u4'), ('material', 'u4')              # indices as uint32
         ])
     
-    # Create edge data
+    # Create edge data with normals
     edge_data = []
     for (start_point, end_point), (plane1_idx, plane2_idx) in diffraction_edges:
+        # Get normals for both planes
+        normal1 = normals[np.where(labels == plane1_idx)[0][0]]  # Get normal of first plane
+        normal2 = normals[np.where(labels == plane2_idx)[0][0]]  # Get normal of second plane
+        
         edge_data.append((
             float(start_point[0]), float(start_point[1]), float(start_point[2]),
             float(end_point[0]), float(end_point[1]), float(end_point[2]),
-            int(plane1_idx),
-            int(plane2_idx)
+            float(normal1[0]), float(normal1[1]), float(normal1[2]),  # normal1
+            float(normal2[0]), float(normal2[1]), float(normal2[2]),  # normal2
+            int(plane1_idx),    # plane1 index
+            int(plane2_idx),    # plane2 index
+            int(plane1_idx),    # material1 (same as plane index)
+            int(plane2_idx)     # material2 (same as plane index)
         ))
     
     # Define edge element if we have edges
     if edge_data:
         edge = np.array(edge_data,
             dtype=[
-                ('start_x', 'f8'), ('start_y', 'f8'), ('start_z', 'f8'),
-                ('end_x', 'f8'), ('end_y', 'f8'), ('end_z', 'f8'),
-                ('plane1', 'u4'), ('plane2', 'u4')
+                ('start_x', 'f4'), ('start_y', 'f4'), ('start_z', 'f4'),
+                ('end_x', 'f4'), ('end_y', 'f4'), ('end_z', 'f4'),
+                ('normal1_x', 'f4'), ('normal1_y', 'f4'), ('normal1_z', 'f4'),
+                ('normal2_x', 'f4'), ('normal2_y', 'f4'), ('normal2_z', 'f4'),
+                ('plane1', 'u4'), ('plane2', 'u4'),
+                ('material1', 'u4'), ('material2', 'u4')
             ])
         
         # Create PLY file with both vertices and edges
