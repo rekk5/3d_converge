@@ -76,6 +76,7 @@ class DiffractionEdgeDetector:
         self.plane_normals = []
         self.diffraction_edges = []
         self.visualizer = None
+        self.meshes = []  # Add this to store generated meshes
 
     def fit_plane_ransac(self, points):
         """Fit a plane to points using RANSAC."""
@@ -165,6 +166,32 @@ class DiffractionEdgeDetector:
             plane = pcd.select_by_index(indices)
             self.planes.append(plane)
 
+    def create_mesh_from_plane(self, plane_points):
+        """Create a mesh from plane points using Poisson surface reconstruction."""
+        # Create a point cloud for the plane
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(plane_points)
+        
+        # Estimate normals if they don't exist
+        pcd.estimate_normals(
+            search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.1, max_nn=30)
+        )
+        pcd.orient_normals_consistent_tangent_plane(100)
+        
+        # Create mesh using Ball Pivoting algorithm
+        radii = [0.05, 0.1, 0.2, 0.4]
+        mesh = o3d.geometry.TriangleMesh.create_from_point_cloud_ball_pivoting(
+            pcd, o3d.utility.DoubleVector(radii)
+        )
+        
+        # Clean the mesh
+        mesh.remove_degenerate_triangles()
+        mesh.remove_duplicated_triangles()
+        mesh.remove_duplicated_vertices()
+        mesh.remove_non_manifold_edges()
+        
+        return mesh
+
     def find_diffraction_edges(self):
         """Find diffraction edges between planes."""
         edge_scores = []
@@ -214,43 +241,75 @@ class DiffractionEdgeDetector:
             self.diffraction_edges = [edge for edge, score in zip(self.diffraction_edges, edge_scores) 
                                     if score > median_score * 0.5]
 
-    def save_comprehensive_ply(self, output_file):
-        """Save results to a comprehensive PLY file."""
-        all_points = []
-        all_colors = []
-        all_normals = []
-        all_labels = []
+    def process(self, input_file, output_file, visualize=False):
+        """Main processing pipeline."""
+        print(f"\nProcessing {input_file}...")
+        pcd = o3d.io.read_point_cloud(input_file)
         
-        for i, plane in enumerate(self.planes):
+        self.extract_planes_from_segmented_pcd(pcd)
+        
+        # Create meshes from planes
+        print("Generating meshes from planes...")
+        for plane in self.planes:
             points = np.asarray(plane.points)
-            colors = np.asarray(plane.colors)
-            normal, _ = self.fit_plane_ransac(points)
-            if normal is None:
-                normal = np.array([0, 0, 1])
-            
-            normals = np.tile(normal, (len(points), 1))
-            labels = np.full(len(points), i)
-            
-            all_points.extend(points)
-            all_colors.extend(colors)
-            all_normals.extend(normals)
-            all_labels.extend(labels)
+            mesh = self.create_mesh_from_plane(points)
+            mesh.paint_uniform_color(np.asarray(plane.colors)[0])  # Use the plane's color
+            self.meshes.append(mesh)
         
-        all_points = np.array(all_points)
-        all_colors = np.array(all_colors)
-        all_normals = np.array(all_normals)
-        all_labels = np.array(all_labels)
+        self.find_diffraction_edges()
+        
+        if self.diffraction_edges:
+            print(f"\nFound {len(self.diffraction_edges)} diffraction edges")
+        else:
+            print("\nNo diffraction edges found.")
+        
+        self.save_comprehensive_ply(output_file)
+        print(f"Results saved to: {output_file}")
+
+        if visualize:
+            self.visualize_results()
+
+    def save_comprehensive_ply(self, output_file):
+        """Save results to a comprehensive PLY file with meshes."""
+        all_vertices = []
+        all_triangles = []
+        all_vertex_colors = []
+        all_vertex_normals = []
+        all_labels = []
+        vertex_offset = 0
+        
+        # Process each mesh
+        for i, mesh in enumerate(self.meshes):
+            vertices = np.asarray(mesh.vertices)
+            triangles = np.asarray(mesh.triangles)
+            vertex_colors = np.asarray(mesh.vertex_colors)
+            vertex_normals = np.asarray(mesh.vertex_normals)
+            
+            # Add vertices with offset
+            all_vertices.extend(vertices)
+            all_triangles.extend(triangles + vertex_offset)
+            all_vertex_colors.extend(vertex_colors)
+            all_vertex_normals.extend(vertex_normals)
+            all_labels.extend([i] * len(vertices))
+            
+            vertex_offset += len(vertices)
         
         # Create vertex data
         vertex_data = []
-        for p, c, n, l in zip(all_points, all_colors, all_normals, all_labels):
+        for v, c, n, l in zip(all_vertices, all_vertex_colors, all_vertex_normals, all_labels):
             vertex_data.append((
-                float(p[0]), float(p[1]), float(p[2]),
+                float(v[0]), float(v[1]), float(v[2]),
                 int(c[0] * 255), int(c[1] * 255), int(c[2] * 255),
                 float(n[0]), float(n[1]), float(n[2]),
                 int(l), int(l)
             ))
         
+        # Create face data
+        face_data = []
+        for triangle in all_triangles:
+            face_data.append(([int(triangle[0]), int(triangle[1]), int(triangle[2])],))
+        
+        # Define vertex and face elements
         vertex = np.array(vertex_data,
             dtype=[
                 ('x', 'f4'), ('y', 'f4'), ('z', 'f4'),
@@ -259,7 +318,10 @@ class DiffractionEdgeDetector:
                 ('label', 'u4'), ('material', 'u4')
             ])
         
-        # Create edge data if we have edges
+        face = np.array(face_data,
+            dtype=[('vertex_indices', 'i4', (3,))])
+        
+        # Add edge data if we have edges
         if self.diffraction_edges:
             edge_data = []
             for (start_point, end_point), (plane1_idx, plane2_idx), normal1, normal2 in self.diffraction_edges:
@@ -284,24 +346,26 @@ class DiffractionEdgeDetector:
             
             PlyData([
                 PlyElement.describe(vertex, 'vertex'),
+                PlyElement.describe(face, 'face'),
                 PlyElement.describe(edge, 'edge')
             ], text=True).write(output_file)
         else:
-            PlyData([PlyElement.describe(vertex, 'vertex')], text=True).write(output_file)
+            PlyData([
+                PlyElement.describe(vertex, 'vertex'),
+                PlyElement.describe(face, 'face')
+            ], text=True).write(output_file)
 
     def visualize_results(self):
-        """Visualize the segmented planes and diffraction edges."""
-        if not self.planes:
-            print("No planes to visualize.")
+        """Visualize the segmented meshes and diffraction edges."""
+        if not self.meshes:
+            print("No meshes to visualize.")
             return
 
         self.visualizer = DiffractionEdgeVisualizer()
 
-        # Add all planes to visualization
-        combined_pcd = self.planes[0]
-        for plane in self.planes[1:]:
-            combined_pcd += plane
-        self.visualizer.add_point_cloud(combined_pcd)
+        # Add all meshes to visualization
+        for mesh in self.meshes:
+            self.visualizer.vis.add_geometry(mesh)
 
         # Visualize diffraction edges
         if self.diffraction_edges:
@@ -325,31 +389,6 @@ class DiffractionEdgeDetector:
         self.visualizer.vis.get_view_control().set_zoom(0.8)
         self.visualizer.run()
         self.visualizer.destroy()
-
-    def process(self, input_file, output_file, visualize=False):
-        """
-        Main processing pipeline.
-        
-        :param input_file: Path to input point cloud file
-        :param output_file: Path to output file
-        :param visualize: Whether to show visualization
-        """
-        print(f"\nProcessing {input_file}...")
-        pcd = o3d.io.read_point_cloud(input_file)
-        
-        self.extract_planes_from_segmented_pcd(pcd)
-        self.find_diffraction_edges()
-        
-        if self.diffraction_edges:
-            print(f"\nFound {len(self.diffraction_edges)} diffraction edges")
-        else:
-            print("\nNo diffraction edges found.")
-        
-        self.save_comprehensive_ply(output_file)
-        print(f"Results saved to: {output_file}")
-
-        if visualize:
-            self.visualize_results()
 
 
 def main():
