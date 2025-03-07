@@ -5,6 +5,8 @@ from scipy.spatial import cKDTree
 from sklearn.decomposition import PCA
 import argparse
 from plyfile import PlyData, PlyElement
+import os
+import sys
 
 
 class DiffractionEdgeVisualizer:
@@ -391,12 +393,66 @@ class DiffractionEdgeDetector:
         self.visualizer.destroy()
 
 
+def validate_segmented_point_cloud(file_path):
+    """
+    Validates that the provided file exists and is properly segmented for diffraction edge detection.
+    
+    Args:
+        file_path: Path to the segmented point cloud file
+        
+    Returns:
+        bool: True if the file is valid, False otherwise
+    """
+    # Check if file exists
+    if not os.path.isfile(file_path):
+        print(f"Error: File not found: {file_path}")
+        return False
+    
+    # Check file extension
+    valid_extensions = ['.ply']
+    _, ext = os.path.splitext(file_path)
+    if ext.lower() not in valid_extensions:
+        print(f"Error: Only PLY files are supported for diffraction edge detection.")
+        return False
+    
+    # Try to open the file with Open3D
+    try:
+        pcd = o3d.io.read_point_cloud(file_path)
+        
+        # Check if there are enough points
+        if len(np.asarray(pcd.points)) < 100:
+            print(f"Error: Point cloud has too few points ({len(np.asarray(pcd.points))}).")
+            return False
+        
+        # Check if the point cloud has color information (needed for segmentation)
+        if not pcd.has_colors():
+            print("Error: Point cloud does not have color information. Input must be a segmented point cloud.")
+            return False
+        
+        # Check if there are multiple segments (different colors)
+        colors = np.asarray(pcd.colors)
+        unique_colors = np.unique(colors, axis=0)
+        if len(unique_colors) < 2:
+            print(f"Error: Point cloud has only {len(unique_colors)} segment(s). At least 2 segments are needed for edge detection.")
+            return False
+            
+        print(f"Point cloud validated: {len(np.asarray(pcd.points))} points, {len(unique_colors)} segments")
+        return True
+    except Exception as e:
+        print(f"Error loading point cloud: {e}")
+        return False
+
+
 def main():
     parser = argparse.ArgumentParser(description="Process a segmented point cloud to find diffraction edges.")
     parser.add_argument("input_file", type=str, help="Path to the input segmented point cloud .ply file")
     parser.add_argument("output_file", type=str, help="Path to save the output .ply file with diffraction edges")
     parser.add_argument("--visualize", action="store_true", help="Show visualization of results")
     args = parser.parse_args()
+    
+    # Validate input file
+    if not validate_segmented_point_cloud(args.input_file):
+        sys.exit(1)
     
     detector = DiffractionEdgeDetector()
     detector.process(args.input_file, args.output_file, args.visualize)

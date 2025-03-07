@@ -4,12 +4,13 @@ import matplotlib.pyplot as plt
 import argparse
 import sys
 import yaml
+import os
 
 
 class PointCloudSegmentation:
     """Handles point cloud processing and plane segmentation."""
 
-    def __init__(self, max_planes=12, voxel_size=0.03, distance_threshold=0.03, min_points=500, 
+    def __init__(self, max_planes=18, voxel_size=0.03, distance_threshold=0.03, min_points=500, 
                  normal_threshold=0.85, ransac_n=3, iterations=20000):
         """
         Initialize the segmentation class.
@@ -215,40 +216,62 @@ class PointCloudSegmentation:
             sys.exit(1)
 
 
+def validate_point_cloud_file(file_path):
+    """
+    Validates that the provided file exists and can be opened as a point cloud.
+    
+    Args:
+        file_path: Path to the point cloud file
+        
+    Returns:
+        bool: True if the file is valid, False otherwise
+    """
+    # Check if file exists
+    if not os.path.isfile(file_path):
+        print(f"Error: File not found: {file_path}")
+        return False
+    
+    # Check file extension
+    valid_extensions = ['.ply', '.pcd', '.xyz', '.xyzn', '.xyzrgb', '.pts']
+    _, ext = os.path.splitext(file_path)
+    if ext.lower() not in valid_extensions:
+        print(f"Warning: File extension {ext} might not be supported. Valid extensions: {', '.join(valid_extensions)}")
+    
+    # Try to open the file with Open3D
+    try:
+        pcd = o3d.io.read_point_cloud(file_path)
+        if len(np.asarray(pcd.points)) == 0:
+            print(f"Error: Point cloud file is empty: {file_path}")
+            return False
+        return True
+    except Exception as e:
+        print(f"Error loading point cloud: {e}")
+        return False
+
+
 def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Segment planes in a point cloud.')
-    parser.add_argument('input_path', help='Path to input PLY file')
-    parser.add_argument('--output_path', help='Path to output PLY file', default=None)
-    parser.add_argument('--max_planes', type=int, default=18, help='Maximum number of planes to segment')
-    parser.add_argument('--voxel_size', type=float, default=0.03, help='Voxel size for downsampling')
-    parser.add_argument('--distance_threshold', type=float, default=0.03, help='Distance threshold for plane segmentation')
-    parser.add_argument('--min_points', type=int, default=500, help='Minimum points for a valid plane')
-    parser.add_argument('--normal_threshold', type=float, default=0.85, help='Threshold for normal consistency')
-    parser.add_argument('--refine', action='store_true', help='Enable plane refinement and merging')
+    parser.add_argument('input_path', help='Path to input point cloud file')
     
     args = parser.parse_args()
     
-    # If output path not specified, create one based on input path
-    if args.output_path is None:
-        args.output_path = args.input_path.rsplit('.', 1)[0] + '_segmented.ply'
+    # Validate input file
+    if not validate_point_cloud_file(args.input_path):
+        sys.exit(1)
     
-    # Process the point cloud
-    segmenter = PointCloudSegmentation(
-        max_planes=args.max_planes,
-        voxel_size=args.voxel_size,
-        distance_threshold=args.distance_threshold,
-        min_points=args.min_points,
-        normal_threshold=args.normal_threshold
-    )
+    # Create output path based on input path
+    output_path = args.input_path.rsplit('.', 1)[0] + '_segmented.ply'
+    
+    # Process the point cloud with default parameters
+    segmenter = PointCloudSegmentation()
     
     segmenter.load_and_preprocess(args.input_path)
     segmenter.segment_planes()
+    segmenter.refine_segments()  # Always perform refinement
+    segmenter.save_result(output_path)
     
-    if args.refine:
-        segmenter.refine_segments()
-        
-    segmenter.save_result(args.output_path)
+    print(f"Segmented point cloud saved to: {output_path}")
 
 
 if __name__ == "__main__":
