@@ -92,9 +92,104 @@ def perform_tsdf_fusion(rgb_files, depth_files, intrinsic, extrinsic_list, voxel
     pcd = volume.extract_point_cloud()
     return pcd, mesh
 
+def validate_tsdf_input_data(data_path):
+    """
+    Validates that the provided directory contains all necessary data for TSDF fusion.
+    
+    Args:
+        data_path: Path to the data directory
+        
+    Returns:
+        bool: True if the data is valid, False otherwise
+    """
+    import os
+    import glob
+    
+    # Check if data directory exists
+    if not os.path.isdir(data_path):
+        print(f"Error: Data directory not found: {data_path}")
+        return False
+    
+    # Check for required subdirectories
+    required_dirs = ["color", "depth_render", "poses", "calibration"]
+    for dir_name in required_dirs:
+        dir_path = os.path.join(data_path, dir_name)
+        if not os.path.isdir(dir_path):
+            print(f"Error: Required directory not found: {dir_path}")
+            return False
+    
+    # Check for RGB images
+    color_path = os.path.join(data_path, "color")
+    color_files = glob.glob(os.path.join(color_path, "*.jpg")) + glob.glob(os.path.join(color_path, "*.png"))
+    if not color_files:
+        print(f"Error: No RGB images found in {color_path}")
+        return False
+    
+    # Check for depth images
+    depth_path = os.path.join(data_path, "depth_render")
+    depth_files = glob.glob(os.path.join(depth_path, "*.png"))
+    if not depth_files:
+        print(f"Error: No depth images found in {depth_path}")
+        return False
+    
+    # Check if number of RGB and depth images match
+    if len(color_files) != len(depth_files):
+        print(f"Warning: Number of RGB images ({len(color_files)}) does not match number of depth images ({len(depth_files)})")
+    
+    # Check for pose file
+    poses_path = os.path.join(data_path, "poses", "poses_color.txt")
+    if not os.path.isfile(poses_path):
+        print(f"Error: Pose file not found: {poses_path}")
+        return False
+    
+    # Check for calibration file
+    calib_path = os.path.join(data_path, "calibration", "calib_color.yaml")
+    if not os.path.isfile(calib_path):
+        print(f"Error: Calibration file not found: {calib_path}")
+        return False
+    
+    # Verify pose file format
+    try:
+        poses_data = np.loadtxt(poses_path, delimiter=' ')
+        if poses_data.shape[0] < 1:
+            print(f"Error: Pose file is empty: {poses_path}")
+            return False
+        if poses_data.shape[1] != 8:  # timestamp + translation + quaternion
+            print(f"Error: Pose file has incorrect format. Expected 8 columns, got {poses_data.shape[1]}")
+            return False
+    except Exception as e:
+        print(f"Error reading pose file: {e}")
+        return False
+    
+    # Verify calibration file format
+    try:
+        with open(calib_path, 'r') as f:
+            first_line = f.readline()
+            if ':' in first_line:
+                first_line = first_line.replace(':', ' ')
+            calib_data = yaml.safe_load(first_line + f.read())
+        
+        required_calib_fields = ["image_width", "image_height", "projection_matrix"]
+        for field in required_calib_fields:
+            if field not in calib_data:
+                print(f"Error: Calibration file missing required field: {field}")
+                return False
+    except Exception as e:
+        print(f"Error reading calibration file: {e}")
+        return False
+    
+    print(f"TSDF input data validated: {len(color_files)} RGB images, {len(depth_files)} depth images")
+    return True
+
 def main(args):
     # Set the data paths
-    args.data_path = f"/home/lhuynh/Desktop/Dataset/BS3D/corridor"
+    args.data_path = f"/home/t/Desktop/cwcorg"
+    
+    # Validate input data
+    if not validate_tsdf_input_data(args.data_path):
+        print("Error: Invalid input data for TSDF fusion")
+        return
+    
     color_path = os.path.join(args.data_path, "color")
     depth_path = os.path.join(args.data_path, "depth_render")
     poses_path = os.path.join(args.data_path, "poses", "poses_color.txt")
@@ -111,7 +206,8 @@ def main(args):
     depth_list = glob.glob(os.path.join(depth_path, "*.png"))
     depth_list.sort()
 
-    # Load the camera poses
+    # Load the camera poses   nn = 10
+    std_multiplier = 2.0
     cam_poses, _ = read_trajectory(poses_path)
     print("cam_poses.shape: ", cam_poses.shape)
     print("cam_poses[0]: ", cam_poses[0])
