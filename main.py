@@ -6,7 +6,7 @@ import open3d as o3d
 
 from colmap_recon import run_colmap
 from tsdf_fusion import TSDFFusion
-from segmentation import PointCloudSegmentation, validate_point_cloud_file, validate_segmented_point_cloud
+from segmentation import PointCloudSegmentation, validate_point_cloud_file
 from diffraction import DiffractionEdgeDetector, validate_segmented_point_cloud
 
 def parse_arguments():
