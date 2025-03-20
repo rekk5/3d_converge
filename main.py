@@ -27,8 +27,8 @@ def parse_arguments():
     # Point cloud segmentation parameters
     parser.add_argument('--skip_segmentation', action='store_true', help='Skip the segmentation phase')
     parser.add_argument('--voxel_size', type=float, default=0.03, help='Voxel size for downsampling')
-    parser.add_argument('--max_planes', type=int, default=5, help='Maximum number of planes to detect')
-    parser.add_argument('--distance_threshold', type=float, default=0.02, help='Distance threshold for plane detection')
+    parser.add_argument('--max_planes', type=int, default=18, help='Maximum number of planes to detect')
+    parser.add_argument('--distance_threshold', type=float, default=0.04, help='Distance threshold for plane detection')
     
     # Diffraction edge parameters
     parser.add_argument('--skip_diffraction', action='store_true', help='Skip the diffraction edge detection phase')
