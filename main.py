@@ -20,7 +20,7 @@ def parse_arguments():
     parser.add_argument('--point_cloud_path', type=str, help='Path to existing point cloud (skip reconstruction)')
     
     # TSDF specific parameters
-    parser.add_argument('--depth_path', type=str, help='Path to depth images (required for TSDF)')
+    parser.add_argument('--tsdf_data_path', type=str, help='Path to data directory with color, depth, poses, and calibration folders')
     parser.add_argument('--voxel_length', type=float, default=0.01, help='Voxel length for TSDF fusion')
     parser.add_argument('--sdf_trunc', type=float, default=0.04, help='Truncation distance for TSDF')
     
@@ -47,11 +47,11 @@ def main():
     point_cloud_path = args.point_cloud_path
     
     if args.recon_method != 'none' and point_cloud_path is None:
-        if args.image_path is None:
-            print("Error: --image_path is required for reconstruction")
-            sys.exit(1)
-            
         if args.recon_method == 'colmap':
+            if args.image_path is None:
+                print("Error: --image_path is required for COLMAP reconstruction")
+                sys.exit(1)
+                
             print("===== PHASE 1: COLMAP RECONSTRUCTION =====")
             print(f"Starting COLMAP reconstruction with images from: {args.image_path}")
             
@@ -73,41 +73,34 @@ def main():
             print("===== PHASE 1: TSDF FUSION RECONSTRUCTION =====")
             
             # Validate required paths for TSDF
-            if not args.depth_path:
-                print("Error: TSDF fusion requires depth images. Please provide --depth_path")
+            if not args.tsdf_data_path:
+                print("Error: TSDF fusion requires a data path with the expected folder structure.")
+                print("Please provide --tsdf_data_path pointing to a directory containing:")
+                print("  - color/ (RGB images)")
+                print("  - depth_render/ (depth images)")
+                print("  - poses/poses_color.txt (camera poses)")
+                print("  - calibration/calib_color.yaml (camera calibration)")
                 sys.exit(1)
             
-            # Create required directory structure for TSDF
-            tsdf_data_path = os.path.join(args.output_dir, 'tsdf_data')
-            os.makedirs(tsdf_data_path, exist_ok=True)
+            print(f"Starting TSDF fusion with data from: {args.tsdf_data_path}")
             
-            # Create required subdirectories
-            color_dir = os.path.join(tsdf_data_path, 'color')
-            depth_dir = os.path.join(tsdf_data_path, 'depth_render')
-            poses_dir = os.path.join(tsdf_data_path, 'poses')
-            calib_dir = os.path.join(tsdf_data_path, 'calibration')
+            # Check if the expected folder structure exists
+            required_paths = [
+                os.path.join(args.tsdf_data_path, 'color'),
+                os.path.join(args.tsdf_data_path, 'depth_render'),
+                os.path.join(args.tsdf_data_path, 'poses'),
+                os.path.join(args.tsdf_data_path, 'calibration')
+            ]
             
-            for directory in [color_dir, depth_dir, poses_dir, calib_dir]:
-                os.makedirs(directory, exist_ok=True)
+            for path in required_paths:
+                if not os.path.exists(path):
+                    print(f"Error: Required directory not found: {path}")
+                    sys.exit(1)
             
-            # Copy/link input data to the expected structure
-            # Note: You'll need to implement these functions based on your data format
+            # Run TSDF fusion
             try:
-                # Setup color images
-                setup_color_images(args.image_path, color_dir)
-                
-                # Setup depth images
-                setup_depth_images(args.depth_path, depth_dir)
-                
-                # Setup camera poses
-                setup_camera_poses(args.image_path, os.path.join(poses_dir, 'poses_color.txt'))
-                
-                # Setup calibration
-                setup_camera_calibration(args.image_path, os.path.join(calib_dir, 'calib_color.yaml'))
-                
-                # Run TSDF fusion
                 tsdf = TSDFFusion(
-                    data_path=tsdf_data_path,
+                    data_path=args.tsdf_data_path,
                     voxel_length=args.voxel_length,
                     sdf_trunc=args.sdf_trunc
                 )
@@ -115,14 +108,16 @@ def main():
                 pcd, mesh = tsdf.run(save_pcd=True, save_mesh=True)
                 
                 if pcd is not None:
-                    point_cloud_path = os.path.join(tsdf_data_path, 'recon', 'point_cloud.ply')
+                    point_cloud_path = os.path.join(args.tsdf_data_path, 'recon', 'point_cloud.ply')
                     print(f"TSDF fusion completed. Point cloud saved to: {point_cloud_path}")
                 else:
                     print("Error: TSDF fusion failed to generate a point cloud")
                     sys.exit(1)
                     
             except Exception as e:
-                print(f"Error during TSDF fusion setup: {e}")
+                print(f"Error during TSDF fusion: {e}")
+                import traceback
+                traceback.print_exc()
                 sys.exit(1)
     
     elif point_cloud_path is None:
@@ -199,27 +194,6 @@ def main():
         print("\nSkipping diffraction edge detection phase.")
     
     print("\nPipeline completed successfully!")
-
-# Helper functions for TSDF data setup
-def setup_color_images(src_path, dst_path):
-    """Setup color images in the expected directory structure."""
-    # Implementation depends on your input data format
-    pass
-
-def setup_depth_images(src_path, dst_path):
-    """Setup depth images in the expected directory structure."""
-    # Implementation depends on your input data format
-    pass
-
-def setup_camera_poses(src_path, dst_file):
-    """Setup camera poses file in the expected format."""
-    # Implementation depends on your input data format
-    pass
-
-def setup_camera_calibration(src_path, dst_file):
-    """Setup camera calibration file in the expected format."""
-    # Implementation depends on your input data format
-    pass
 
 if __name__ == "__main__":
     main()
