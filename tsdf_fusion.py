@@ -180,39 +180,72 @@ class TSDFFusion:
         # Load calibration data from YAML file
         try:
             with open(self.calib_path, 'r') as f:
-                first_line = f.readline()
-                if ':' in first_line:
-                    print("Found ':' in first line")
-                    first_line = first_line.replace(':', ' ')
-                calib_data = yaml.safe_load(first_line + f.read())
+                calib_text = f.read()
+                
+                # Add proper YAML document start marker if missing
+                if not calib_text.startswith("%YAML") and not calib_text.startswith("---"):
+                    calib_text = "---\n" + calib_text
+                
+                # Try to parse the YAML data
+                try:
+                    calib_data = yaml.safe_load(calib_text)
+                except Exception as yaml_error:
+                    print(f"YAML parsing error: {yaml_error}")
+                    # Fallback: Try alternative parsing for problematic formats
+                    lines = calib_text.split('\n')
+                    if ':' in lines[0]:
+                        lines[0] = lines[0].replace(':', ' ')
+                    calib_data = yaml.safe_load('\n'.join(lines))
+            
+            print("Loaded calibration data keys:", calib_data.keys())
             
             # Extract calibration data
             image_width = calib_data['image_width']
             image_height = calib_data['image_height']
-            projection_matrix = np.array(calib_data['projection_matrix']['data']).reshape(3, 4)
+            
+            # Extract camera matrix parameters - prioritize camera_matrix if available
+            if 'camera_matrix' in calib_data:
+                # New format
+                camera_matrix = np.array(calib_data['camera_matrix']['data']).reshape(3, 3)
+                fx = camera_matrix[0, 0]
+                fy = camera_matrix[1, 1]
+                cx = camera_matrix[0, 2]
+                cy = camera_matrix[1, 2]
+                print("Using camera_matrix for intrinsics")
+            elif 'projection_matrix' in calib_data:
+                # Old format
+                projection_matrix = np.array(calib_data['projection_matrix']['data']).reshape(3, 4)
+                # Extract intrinsic matrix from projection matrix
+                intrinsic_matrix = projection_matrix[:3, :3]
+                fx = intrinsic_matrix[0, 0]
+                fy = intrinsic_matrix[1, 1]
+                cx = intrinsic_matrix[0, 2]
+                cy = intrinsic_matrix[1, 2]
+                print("Using projection_matrix for intrinsics")
+            else:
+                raise ValueError("Calibration file is missing camera matrix information")
             
             # Check calibration data
             print("Image width:", image_width)
             print("Image height:", image_height)
-            print("Projection matrix:", projection_matrix)
-            
-            # Extract intrinsic matrix from projection matrix
-            intrinsic_matrix = projection_matrix[:3, :3]
+            print(f"Camera parameters: fx={fx}, fy={fy}, cx={cx}, cy={cy}")
             
             # Create PinholeCameraIntrinsic object using loaded calibration data
             self.intrinsic = o3d.camera.PinholeCameraIntrinsic(
                 image_width,
                 image_height,
-                intrinsic_matrix[0, 0],  # fx
-                intrinsic_matrix[1, 1],  # fy
-                intrinsic_matrix[0, 2],  # cx
-                intrinsic_matrix[1, 2]   # cy
+                fx,
+                fy,
+                cx,
+                cy
             )
             print("Check intrinsic matrix:", self.intrinsic.intrinsic_matrix)
             return True
             
         except Exception as e:
             print(f"Error loading calibration data: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     def perform_fusion(self):
