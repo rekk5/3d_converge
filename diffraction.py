@@ -63,13 +63,13 @@ class DiffractionEdgeVisualizer:
 class DiffractionEdgeDetector:
     """Class for detecting and visualizing diffraction edges in segmented point clouds."""
     
-    def __init__(self, min_points=50, ransac_threshold=0.2, distance_threshold=0.1):
+    def __init__(self, min_points=20, ransac_threshold=0.1, distance_threshold=0.15):
         """
-        Initialize the detector with parameters.
+        Initialize the detector with more lenient parameters.
         
-        :param min_points: Minimum points required for line fitting
-        :param ransac_threshold: Threshold for RANSAC plane fitting
-        :param distance_threshold: Distance threshold for close points
+        :param min_points: Reduced minimum points required for line fitting (was 50)
+        :param ransac_threshold: Reduced threshold for RANSAC plane fitting (was 0.2)
+        :param distance_threshold: Increased distance threshold for close points (was 0.1)
         """
         self.min_points = min_points
         self.ransac_threshold = ransac_threshold
@@ -108,7 +108,7 @@ class DiffractionEdgeDetector:
         tree2 = cKDTree(points2)
         
         angle = np.arccos(np.clip(np.dot(normal1, normal2), -1.0, 1.0))
-        if angle < np.pi/15 or angle > 15*np.pi/16:
+        if angle < np.pi/20 or angle > 19*np.pi/20:
             return np.array([])
         
         distances, indices = tree2.query(points1, k=1)
@@ -125,17 +125,17 @@ class DiffractionEdgeDetector:
         return np.array(close_points)
 
     def fit_line_to_points(self, points):
-        """Fit a line to points using PCA."""
+        """Fit a line to points using PCA with more lenient thresholds."""
         if len(points) < self.min_points:
             return None, None
         
         pca = PCA(n_components=2)
         pca.fit(points)
         
-        if pca.explained_variance_ratio_[0] < 0.9:
+        if pca.explained_variance_ratio_[0] < 0.8:
             return None, None
         
-        if pca.explained_variance_ratio_[1] > 0.05:
+        if pca.explained_variance_ratio_[1] > 0.1:
             return None, None
         
         direction = pca.components_[0]
@@ -147,12 +147,12 @@ class DiffractionEdgeDetector:
         min_idx, max_idx = np.argmin(distances), np.argmax(distances)
         edge_length = np.linalg.norm(projected_points[max_idx] - projected_points[min_idx])
         
-        if edge_length < 0.5 or edge_length > 100.0:
+        if edge_length < 0.3 or edge_length > 500.0:
             return None, None
         
         sorted_distances = np.sort(distances)
         gaps = sorted_distances[1:] - sorted_distances[:-1]
-        if np.max(gaps) > edge_length * 0.6:
+        if np.max(gaps) > edge_length * 0.8:
             return None, None
         
         return projected_points[min_idx], projected_points[max_idx]
@@ -241,7 +241,7 @@ class DiffractionEdgeDetector:
         if edge_scores:
             median_score = np.median(edge_scores)
             self.diffraction_edges = [edge for edge, score in zip(self.diffraction_edges, edge_scores) 
-                                    if score > median_score * 0.5]
+                                    if score > median_score * 0.3]
 
     def process(self, input_file, output_file, visualize=False):
         """Main processing pipeline."""

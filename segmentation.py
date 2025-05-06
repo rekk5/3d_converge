@@ -11,7 +11,7 @@ class PointCloudSegmentation:
     """Handles point cloud processing and plane segmentation."""
 
     def __init__(self, max_planes=18, voxel_size=0.03, distance_threshold=0.03, min_points=500, 
-                 normal_threshold=0.75, ransac_n=3, iterations=20000):
+                 normal_threshold=0.60, ransac_n=3, iterations=20000):
         """
         Initialize the segmentation class.
 
