@@ -1,0 +1,59 @@
+experiment:
+  location: Oulu  # or Porto
+
+  base_model: yes  # or no
+
+  digital_twin: yes  # or no
+
+  frequency: 28GHz  # example value, replace as needed
+
+  # experiment time points in seconds from t=0 (start) and Nerian Ruby captures 30 fps
+  t:
+    - 0      # start
+    - 180    # 3 minutes
+
+  # counts for quick reference
+  num_tx: 1
+  num_rx: 1
+  num_ris: 2
+  num_cameras: 6  # total cameras in use
+
+  ris:
+    - id: ris1
+      position: [x1, y1, z1]
+      orientation: [alpha1, beta1, gamma1]
+    - id: ris2
+      position: [x2, y2, z2]
+      orientation: [alpha2, beta2, gamma2]
+
+  tx:
+    - id: tx1
+      device_type: liteon  # e.g., LiteOn transmitter
+      position: [x, y, z]
+      orientation: [alpha, beta, gamma]
+
+  rx:
+    - id: rx1
+      device_type: quectel  # e.g., Quectel or Samsung Galaxy 25
+      position: [x, y, z]
+      orientation: [alpha, beta, gamma]
+
+  cameras:
+    - id: cam1
+      position: [x1, y1, z1]
+      orientation: [alpha1, beta1, gamma1]
+    - id: cam2
+      position: [x2, y2, z2]
+      orientation: [alpha2, beta2, gamma2]
+    - id: cam3
+      position: [x3, y3, z3]
+      orientation: [alpha3, beta3, gamma3]
+    - id: cam4
+      position: [x4, y4, z4]
+      orientation: [alpha4, beta4, gamma4]
+    - id: cam5
+      position: [x5, y5, z5]
+      orientation: [alpha5, beta5, gamma5]
+    - id: cam6
+      position: [x6, y6, z6]
+      orientation: [alpha6, beta6, gamma6]

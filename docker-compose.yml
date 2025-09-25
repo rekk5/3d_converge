@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  # 3D Reconstruction Pipeline
+  mast3r-pipeline:
+    build: .
+    container_name: mast3r-3d-pipeline
+    volumes:
+      # Mount input directory for images/data
+      - ./input:/app/input:ro
+      # Mount output directory for results
+      - ./output:/app/output
+      # Mount test directory
+      - ./test_output:/app/test_output
+      # Optional: Mount for development (comment out for production)
+      # - .:/app
+    environment:
+      - DISPLAY=${DISPLAY}
+      - PYTHONUNBUFFERED=1
+    working_dir: /app
+    command: ["conda", "run", "-n", "mast3r", "python", "main.py", "--help"]
+    
+  # Development service with interactive shell
+  mast3r-dev:
+    build: .
+    container_name: mast3r-dev
+    volumes:
+      - ./input:/app/input:ro
+      - ./output:/app/output
+      - ./test_output:/app/test_output
+      - .:/app  # Mount source code for development
+    environment:
+      - DISPLAY=${DISPLAY}
+      - PYTHONUNBUFFERED=1
+    working_dir: /app
+    command: ["conda", "run", "-n", "mast3r", "/bin/bash"]
+    stdin_open: true
+    tty: true
+    
+  # Visualization service
+  mast3r-viz:
+    build: .
+    container_name: mast3r-viz
+    volumes:
+      - ./output:/app/output:ro
+      - ./test_output:/app/test_output:ro
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw  # For X11 forwarding
+    environment:
+      - DISPLAY=${DISPLAY}
+      - PYTHONUNBUFFERED=1
+    working_dir: /app
+    command: ["conda", "run", "-n", "mast3r", "python", "visualization.py", "--help"]
+    depends_on:
+      - mast3r-pipeline
+
+networks:
+  default:
+    name: mast3r-network 

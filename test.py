@@ -1,6 +1,38 @@
 import numpy as np
 from plyfile import PlyData
 import argparse
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
+def plot_diffraction_edge_normals(edges):
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    
+    for e in edges:
+        # Start and end points
+        start = np.array([e['start_x'], e['start_y'], e['start_z']])
+        end = np.array([e['end_x'], e['end_y'], e['end_z']])
+        
+        # Normals
+        normal1 = np.array([e['normal1_x'], e['normal1_y'], e['normal1_z']])
+        normal2 = np.array([e['normal2_x'], e['normal2_y'], e['normal2_z']])
+        
+        # Debugging: Print the data being plotted
+        print(f"Edge from {start} to {end}")
+        print(f"Normal 1: {normal1}, Normal 2: {normal2}")
+        
+        # Plot the edge
+        ax.plot([start[0], end[0]], [start[1], end[1]], [start[2], end[2]], 'k-', label='Edge')
+        
+        # Plot the normals
+        ax.quiver(start[0], start[1], start[2], normal1[0], normal1[1], normal1[2], color='r', length=0.1, normalize=True, label='Normal 1')
+        ax.quiver(start[0], start[1], start[2], normal2[0], normal2[1], normal2[2], color='b', length=0.1, normalize=True, label='Normal 2')
+    
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    plt.title('Diffraction Edge Normals')
+    plt.show()
 
 def check_ply_contents(ply_file):
     try:
@@ -63,19 +95,12 @@ def check_ply_contents(ply_file):
             print("\nEdge Data:")
             print(f"Number of edges: {len(edge)}")
             
-            # Check for required edge properties
-            print("\nChecking required edge properties:")
-            edge_properties = {prop.name: prop.val_dtype for prop in edge.properties}
-            for prop_name, prop_type in required_edge_properties.items():
-                if prop_name in edge_properties:
-                    status = "✓" if edge_properties[prop_name] == prop_type else "⚠ (wrong type)"
+            # Verify edge properties
+            for prop, dtype in required_edge_properties.items():
+                if prop in edge.data.dtype.names:
+                    print(f"Property '{prop}' found with type '{edge.data.dtype[prop]}'")
                 else:
-                    status = "✗"
-                print(f"- {prop_name}: {status}")
-            
-            print("\nAvailable properties:")
-            for prop in edge.properties:
-                print(f"- {prop.name}: {prop.val_dtype}")
+                    print(f"Property '{prop}' is missing!")
             
             # Print sample of edge data
             print("\nSample edge data (first 3 edges):")
@@ -101,6 +126,7 @@ def check_ply_contents(ply_file):
         
         # Check for diffraction edges
         if 'edge' in ply_data:
+            edge = ply_data['edge']
             if 'plane1' in edge.properties and 'plane2' in edge.properties:
                 print("\nDiffraction edge information:")
                 unique_plane_pairs = set()
@@ -115,6 +141,9 @@ def check_ply_contents(ply_file):
                     print(f"  Normal 1: ({e['normal1_x']:.3f}, {e['normal1_y']:.3f}, {e['normal1_z']:.3f})")
                     print(f"  Normal 2: ({e['normal2_x']:.3f}, {e['normal2_y']:.3f}, {e['normal2_z']:.3f})")
                     print(f"  Materials: {e['material1']} and {e['material2']}")
+                
+                # Visualize diffraction edge normals
+                plot_diffraction_edge_normals(edge)
         
     except Exception as e:
         print(f"\nError reading PLY file: {e}")

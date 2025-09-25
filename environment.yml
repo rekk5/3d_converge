@@ -1,0 +1,17 @@
+name: mast3r
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.8
+  - numpy
+  - open3d
+  - opencv
+  - pillow
+  - pyyaml
+  - pip
+  - pip:
+    - plyfile
+    - matplotlib
+    - scikit-learn
+    - scipy 

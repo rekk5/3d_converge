@@ -1,0 +1,135 @@
+stages:
+  - test
+  - build
+  - deploy
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+
+# Cache dependencies between jobs
+cache:
+  paths:
+    - .cache/pip
+    - .cache/conda
+
+# Test stage
+test:
+  stage: test
+  image: python:3.8
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq git wget curl
+    - wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/miniconda.sh
+    - bash /tmp/miniconda.sh -b -p /opt/conda
+    - export PATH="/opt/conda/bin:$PATH"
+    - conda env create -f environment.yml
+  script:
+    - conda activate mast3r
+    - python test_visualization.py
+    - python -c "import open3d; print('Open3D version:', open3d.__version__)"
+    - python -c "import numpy; print('NumPy version:', numpy.__version__)"
+    - python -c "import cv2; print('OpenCV version:', cv2.__version__)"
+  artifacts:
+    reports:
+      junit: test-results.xml
+    paths:
+      - test_output/
+    expire_in: 1 week
+
+# Build Docker image
+build:
+  stage: build
+  image: docker:20.10.16
+  services:
+    - docker:20.10.16-dind
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA .
+    - docker build -t $CI_REGISTRY_IMAGE:latest .
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+    - docker push $CI_REGISTRY_IMAGE:latest
+  only:
+    - main
+    - develop
+  tags:
+    - docker
+
+# Build and test Docker image
+docker-test:
+  stage: test
+  image: docker:20.10.16
+  services:
+    - docker:20.10.16-dind
+  before_script:
+    - docker build -t mast3r-test .
+  script:
+    - docker run --rm mast3r-test conda run -n mast3r python test_visualization.py
+    - docker run --rm mast3r-test conda run -n mast3r python main.py --help
+    - docker run --rm mast3r-test conda run -n mast3r python visualization.py --help
+  artifacts:
+    paths:
+      - test_output/
+    expire_in: 1 week
+  tags:
+    - docker
+
+# Deploy to staging
+deploy-staging:
+  stage: deploy
+  image: docker:20.10.16
+  services:
+    - docker:20.10.16-dind
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - docker pull $CI_REGISTRY_IMAGE:latest
+    - docker tag $CI_REGISTRY_IMAGE:latest mast3r-staging:latest
+    - echo "Deployed to staging environment"
+  environment:
+    name: staging
+    url: https://staging.example.com
+  only:
+    - develop
+  tags:
+    - docker
+
+# Deploy to production
+deploy-production:
+  stage: deploy
+  image: docker:20.10.16
+  services:
+    - docker:20.10.16-dind
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - docker pull $CI_REGISTRY_IMAGE:latest
+    - docker tag $CI_REGISTRY_IMAGE:latest mast3r-production:latest
+    - echo "Deployed to production environment"
+  environment:
+    name: production
+    url: https://production.example.com
+  only:
+    - main
+  when: manual
+  tags:
+    - docker
+
+# Security scan
+security-scan:
+  stage: test
+  image: docker:20.10.16
+  services:
+    - docker:20.10.16-dind
+  before_script:
+    - docker build -t mast3r-scan .
+  script:
+    - echo "Running security scan..."
+    # Add your security scanning tool here
+    - echo "Security scan completed"
+  artifacts:
+    reports:
+      security: security-report.json
+    expire_in: 1 week
+  tags:
+    - docker 
