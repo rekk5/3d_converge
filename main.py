@@ -65,6 +65,7 @@ def parse_arguments():
     parser.add_argument('--distance_threshold', type=float, default=0.04, help='Distance threshold for plane detection')
     parser.add_argument('--skip_refinement', action='store_true', help='Skip the segment refinement/merging step')
     parser.add_argument('--enhanced_segmentation', action='store_true', help='Use enhanced RANSAC+DBSCAN segmentation method')
+    parser.add_argument('--skip_preprocessing', action='store_true', help='Skip outlier removal and downsampling preprocessing')
     
     # Diffraction edge parameters
     parser.add_argument('--skip_diffraction', action='store_true', help='Skip the diffraction edge detection phase')
@@ -331,10 +332,14 @@ def main():
                 max_planes=args.max_planes, 
                 voxel_size=args.voxel_size,
                 distance_threshold=args.distance_threshold,
-                enhanced_mode=args.enhanced_segmentation
+                enhanced_mode=args.enhanced_segmentation,
+                skip_preprocessing=args.skip_preprocessing
             )
             
-            segmenter.load_and_preprocess(point_cloud_path)
+            if args.skip_preprocessing:
+                segmenter.load_without_preprocessing(point_cloud_path)
+            else:
+                segmenter.load_and_preprocess(point_cloud_path)
             
             # Process point cloud and get result
             result = segmenter.segment_planes()

@@ -359,23 +359,23 @@ class DiffractionEdgeDetector:
         valid_meshes = []
         if self.create_mesh:
             print("Generating meshes from planes...")
-            for i, plane in enumerate(self.planes):
-                points = np.asarray(plane.points)
+        for i, plane in enumerate(self.planes):
+            points = np.asarray(plane.points)
+            
+            # Skip very small segments
+            if len(points) < 20:
+                print(f"Skipping plane {i} with only {len(points)} points (too small for mesh creation)")
+                continue
                 
-                # Skip very small segments
-                if len(points) < 20:
-                    print(f"Skipping plane {i} with only {len(points)} points (too small for mesh creation)")
-                    continue
-                
-                mesh = self.create_mesh_from_plane(points)
-                if mesh is not None:
-                    mesh.paint_uniform_color(np.asarray(plane.colors)[0])  # Use the plane's color
-                    valid_meshes.append(mesh)
-                    # Update the plane materials mapping for valid meshes
-                    if i not in self.plane_materials:
-                        self.plane_materials[i] = self.default_material_id
-                else:
-                    print(f"Failed to create mesh for plane {i} with {len(points)} points")
+            mesh = self.create_mesh_from_plane(points)
+            if mesh is not None:
+                mesh.paint_uniform_color(np.asarray(plane.colors)[0])  # Use the plane's color
+                valid_meshes.append(mesh)
+                # Update the plane materials mapping for valid meshes
+                if i not in self.plane_materials:
+                    self.plane_materials[i] = self.default_material_id
+            else:
+                print(f"Failed to create mesh for plane {i} with {len(points)} points")
         else:
             print("Mesh creation disabled; skipping mesh generation.")
         
@@ -406,7 +406,7 @@ class DiffractionEdgeDetector:
         
         self.save_comprehensive_ply(output_file)
         print(f"Results saved to: {output_file}")
-        
+
         if visualize:
             self.visualize_results()
 

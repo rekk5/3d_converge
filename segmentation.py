@@ -11,7 +11,7 @@ class PointCloudSegmentation:
     """Handles point cloud processing and plane segmentation."""
 
     def __init__(self, max_planes=18, voxel_size=0.03, distance_threshold=0.03, min_points=500, 
-                 normal_threshold=0.20, ransac_n=3, iterations=20000, enhanced_mode=False):
+                 normal_threshold=0.20, ransac_n=3, iterations=20000, enhanced_mode=False, skip_preprocessing=False):
         """
         Initialize the segmentation class.
 
@@ -23,6 +23,7 @@ class PointCloudSegmentation:
         :param ransac_n: Number of points to sample for RANSAC
         :param iterations: Maximum iterations for RANSAC
         :param enhanced_mode: Use enhanced RANSAC+DBSCAN method
+        :param skip_preprocessing: Skip outlier removal and downsampling preprocessing
         """
         self.max_planes = max_planes
         self.voxel_size = voxel_size
@@ -32,6 +33,7 @@ class PointCloudSegmentation:
         self.ransac_n = ransac_n
         self.iterations = iterations
         self.enhanced_mode = enhanced_mode
+        self.skip_preprocessing = skip_preprocessing
         self.segments = {}
         self.segment_models = {}
         self.segment_colors = {}  # Store colors for diffraction compatibility
@@ -75,6 +77,48 @@ class PointCloudSegmentation:
         
         # Orient normals consistently
         self.pcd.orient_normals_consistent_tangent_plane(k=20)
+
+
+    def load_without_preprocessing(self, input_path):
+        """Load point cloud with voxel downsampling and minimal outlier removal."""
+        try:
+            self.pcd = o3d.io.read_point_cloud(input_path)
+            print("Original point cloud:", len(np.asarray(self.pcd.points)), "points")
+        except Exception as e:
+            print(f"Error loading point cloud: {e}")
+            sys.exit(1)
+
+        # Center the point cloud
+        self.center = self.pcd.get_center()
+        self.pcd.translate(-self.center)
+        
+        # Do voxel downsampling first
+        if self.voxel_size > 0:
+            print(f"Downsampling point cloud with voxel size: {self.voxel_size}")
+            self.pcd = self.pcd.voxel_down_sample(self.voxel_size)
+            print("Downsampled point cloud:", len(np.asarray(self.pcd.points)), "points")
+        
+        # Very minimal outlier removal (much more conservative than full preprocessing)
+        print("Applying minimal outlier removal...")
+        cl, ind = self.pcd.remove_statistical_outlier(nb_neighbors=15, std_ratio=3.0)  # Very lenient parameters
+        self.pcd = self.pcd.select_by_index(ind)
+        print("After minimal outlier removal:", len(np.asarray(self.pcd.points)), "points")
+        
+        # Estimate normals with adaptive radius
+        print("Estimating normals...")
+        nn_distance = np.mean(self.pcd.compute_nearest_neighbor_distance())
+        radius_normals = nn_distance * 4
+        self.pcd.estimate_normals(
+            search_param=o3d.geometry.KDTreeSearchParamHybrid(
+                radius=radius_normals, 
+                max_nn=30
+            ),
+            fast_normal_computation=False
+        )
+        
+        # Orient normals consistently
+        self.pcd.orient_normals_consistent_tangent_plane(k=20)
+        print("Point cloud loaded with voxel downsampling and minimal outlier removal")
 
     def segment_single_plane(self, visualize=False):
         """
@@ -266,15 +310,17 @@ class PointCloudSegmentation:
 
         print(f"\nSegmentation complete: {len(self.segments)} segments found")
         
-        # Create result by combining segments ONLY for compatibility with existing pipeline
+        # Keep segments separate - NO COMBINING of similar segments
         if self.segments:
+            # Translate segments back to original position but keep them separate
+            for idx, segment in self.segments.items():
+                segment.translate(self.center)
+            
+            # Create a combined result for compatibility but segments remain separate
             all_segments = list(self.segments.values())
             self.result = all_segments[0]
             for segment in all_segments[1:]:
                 self.result += segment
-                
-            # Translate back to original position
-            self.result.translate(self.center)
             
             # Verify diffraction compatibility
             self.verify_diffraction_compatibility()
